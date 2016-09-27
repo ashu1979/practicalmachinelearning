@@ -1,0 +1,108 @@
+---
+title: "Prediction Assignment - Practical Machine Learning"
+author: "Ashutosh Sharma"
+date: "September 25, 2016"
+output: html_document
+---
+
+##Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Data required to perform the prediction is already shared on project assignment page.
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+##Load Data
+
+Assuming that data is already downloaded from above mentioned links and reside in "d:/data" directory.
+
+```{r}
+library(caret)
+library(randomForest)
+library(ggplot2)
+library(e1071)
+
+# Read csv files
+
+training <- read.csv("/Data/Coursera/practicalmachinelearning/pml-training.csv")
+testing <- read.csv("/Data/Coursera/practicalmachinelearning/pml-testing.csv")
+
+str(training)
+
+```
+
+The raw training data has 19622 rows of observations and 160 features. There are many columns with NAs value in it.  So, we need to work on to remove columns with NAs value. There are also some columns which seem to be useless need to be removed.
+
+There is one column of target outcome named "classe".
+
+Let's clean the data first:
+```{r}
+trainclasse <- training$classe
+
+training <- training[, colSums(is.na(training))==0]
+testing <- testing[, colSums(is.na(testing))==0]
+
+filtertraincolumn <- grepl("^X|timestamp|window", names(training))
+filtertestcolumn <- grepl("^X|timestamp|window", names(testing))
+
+training <- training[,!filtertraincolumn]
+testing <- testing[,!filtertestcolumn]
+
+training <- training[,sapply(training, is.numeric)]
+testing <- testing[,sapply(testing, is.numeric)]
+
+training$classe <- trainclasse
+
+```
+
+Now, we fit a predictive model for activity recognition using Random Forest algorithm as it select important features and is robust to correlated covariance. We will use default settings of Random forest available in caret package.
+
+```{r}
+intrain<- createDataPartition(y=training$classe, p=.70, list=FALSE)
+traindata <- training[intrain,]
+testdata <- training[-intrain,]
+
+modRF <- train(classe~., data = traindata, method="rf",trControl=trainControl(method="cv",5), ntree=300)
+
+predictRF <- predict(modRF, testdata)
+
+accuracy <- confusionMatrix(testdata$classe, predictRF)$overall[1]
+
+outofsample <- 1 - as.numeric(confusionMatrix(testdata$classe, predictRF)$overall[1])
+```
+
+modeled with different values of ntree starting from 10 then 100, 200, 300 etc. Found that model build with ntree=200 has accuracy nearly `r accuracy`% and the estimated out of sample error is close to `r outofsample`% which seems to be satisfactory.
+
+Here is the plot of model created:
+
+```{r}
+plot(modRF)
+
+```
+
+Plotting the trees vs. error:
+```{r}
+plot(modRF$finalModel)
+```
+
+Another plot which represent the predictors importance.
+```{r}
+varImpPlot(modRF$finalModel)
+```
+
+Let's predict the testing data provided in assignment using the build Random forest model.
+
+```{r}
+predictTest <- predict(modRF, testing)
+
+predictTest
+
+```
+
